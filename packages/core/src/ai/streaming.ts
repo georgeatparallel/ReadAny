@@ -7,6 +7,7 @@ import i18n from "i18next";
 import type { AIConfig, Book, SemanticContext, Skill, Thread } from "../types";
 import { streamReadingAgent } from "./agents/reading-agent";
 import { processMessages } from "./message-pipeline";
+import type { WebSearchContext } from "./parallel-search";
 import { getToolResultError } from "./tool-result";
 import type { ToolDefinition } from "./tools/tool-types";
 
@@ -25,6 +26,7 @@ export interface StreamingOptions {
     bookId: string | null;
     isVectorized: boolean;
     enabledSkills: Skill[];
+    webSearch?: WebSearchContext;
   }) => ToolDefinition[];
   onToken: (token: string) => void;
   onComplete: (
@@ -103,6 +105,7 @@ export class StreamingChat {
       const stream = streamReadingAgent(
         {
           aiConfig: options.aiConfig,
+          conversationId: options.thread.id,
           book: options.book,
           bookId: options.book?.id || options.bookId || options.thread.bookId || null,
           semanticContext: options.semanticContext,
