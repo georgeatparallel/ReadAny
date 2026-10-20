@@ -266,20 +266,32 @@ function detectQuestionCategory(options: {
   userInput: string;
   hasBookContext: boolean;
   selectionActive: boolean;
+  webSearchRequest?: string;
 }): ReadingQuestionCategory {
   const text = options.userInput.normalize("NFKC").trim();
   if (!text) return options.hasBookContext ? "book_wide_search" : "general_chat";
+  // Only the authored request can authorize web tools. Attached passages and
+  // conceptual mentions of web search must not become an external-search opt-in.
+  const request = (options.webSearchRequest ?? text).normalize("NFKC").trim();
   const deniesWeb =
-    /(?:do not|don't|without|never|不要|別|别|禁止|不准).{0,30}(?:web|internet|online|联网|聯網|上网|上網)/iu.test(
-      text,
+    /(?:do not|don't|without|never).{0,30}(?:web|internet|online)|(?:不|无需|無需|勿|禁止|别|別).{0,12}(?:联网|聯網|上网|上網|网上|網上)/iu.test(
+      request,
     );
+  const describesSearch =
+    /(?:web|internet|online)\s+(?:search\s+)?(?:is|means)\b|(?:联网搜索|聯網搜尋)(?:是什么|是什麼|是什么意思|是什麼意思|的意思|的含义)/iu.test(
+      request,
+    );
+  const englishCommand =
+    /^(?:(?:please|can you|could you|would you)\s+)?(?:search (?:the )?(?:web|internet)\b|search online\b|look (?:it |this |that )?up online\b|(?:read|fetch|open|summarize|analyze)\s+https?:\/\/)/iu;
+  const chineseCommand =
+    /^(?:请|請)?\s*(?:帮我|幫我)?\s*(?:联网(?:搜索|查询|查|核实|验证|查证)|聯網(?:搜尋|查詢|查|核實|驗證|查證)|(?:在)?(?:网上|網上)(?:搜索|搜尋|搜|查)|上网查|上網查|(?:阅读|讀取|读取|打开|打開|总结|總結)\s*https?:\/\/)/u;
   if (
     !deniesWeb &&
-    /(?:search (?:the )?(?:web|internet|online)|(?:web|internet|online) search|look (?:it |this |that )?up online|联网|聯網|网上搜|網上搜|上网查|上網查|(?:read|fetch|open|summarize|analyze|阅读|讀取|读取|打开|打開|总结|總結)\s+https?:\/\/)/iu.test(
-      text,
-    )
-  )
+    !describesSearch &&
+    (englishCommand.test(request) || chineseCommand.test(request))
+  ) {
     return "web_request";
+  }
   if (GENERAL_CHAT_ONLY_RE.test(text)) return "general_chat";
   if (LIBRARY_REQUEST_RE.test(text) || !options.hasBookContext) return "library_request";
   const hasExplicitCurrentSelectionCue = CURRENT_SELECTION_RE.test(text);
@@ -604,6 +616,8 @@ export interface ReadingAgentOptions {
   memorySummary?: string;
   /** Stable opaque thread identity; omitted for a standalone agent run. */
   conversationId?: string;
+  /** Authored user command, before attaching quoted book passages. */
+  webSearchRequest?: string;
   /** Injected tool provider — returns available tools for the agent */
   getAvailableTools: (options: {
     bookId: string | null;
@@ -849,6 +863,7 @@ export async function* streamReadingAgent(
   const effectiveBookId = book?.id || bookId || null;
   const questionCategory = detectQuestionCategory({
     userInput,
+    webSearchRequest: options.webSearchRequest,
     hasBookContext: !!effectiveBookId,
     selectionActive,
   });

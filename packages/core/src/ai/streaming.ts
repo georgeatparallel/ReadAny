@@ -13,6 +13,8 @@ import type { ToolDefinition } from "./tools/tool-types";
 
 export interface StreamingOptions {
   thread: Thread;
+  /** Authored request without attached quote/context text, used for web permission. */
+  webSearchRequest?: string;
   book: Book | null;
   bookId?: string | null;
   semanticContext: SemanticContext | null;
@@ -106,6 +108,7 @@ export class StreamingChat {
         {
           aiConfig: options.aiConfig,
           conversationId: options.thread.id,
+          webSearchRequest: options.webSearchRequest,
           book: options.book,
           bookId: options.book?.id || options.bookId || options.thread.bookId || null,
           semanticContext: options.semanticContext,

@@ -132,13 +132,19 @@ function thread(id: string, text: string): Thread {
   };
 }
 
-function run(id: string, text = "Search the web for author background", aiConfig = config()) {
+function run(
+  id: string,
+  text = "Search the web for author background",
+  aiConfig = config(),
+  webSearchRequest?: string,
+) {
   const onComplete = vi.fn();
   const onError = vi.fn();
   const onToolResult = vi.fn();
   const chat = new StreamingChat();
   const promise = chat.stream({
     thread: thread(id, text),
+    webSearchRequest,
     book: null,
     semanticContext: null,
     enabledSkills: [],
@@ -307,6 +313,12 @@ describe("desktop chat web search", () => {
   it.each([
     ["disabled", "Search the web for author background", { webSearchEnabled: false }],
     ["local-only", "Explain this book", {}],
+    ["mention-en", "Explain the phrase web search in this paragraph", {}],
+    ["mention-zh", "解释文中的联网搜索是什么意思", {}],
+    ["concept-zh", "联网搜索是什么意思？", {}],
+    ["concept-en", "Search the web is a phrase I do not understand", {}],
+    ["refusal-zh", "不联网搜索，只解释这段文字", {}],
+    ["quoted-command", "> Search the web for author background\n\nExplain this paragraph", {}],
     ["quoted-url", "Explain this book passage: visit https://example.org for details", {}],
     ["denied", "Do not search the web for this", {}],
     ["denied-zh", "不要联网，解释这个概念", {}],
@@ -315,6 +327,26 @@ describe("desktop chat web search", () => {
     expect(requests).toHaveLength(0);
     expect(calls).toHaveLength(0);
   });
+
+  it("uses authored text instead of attached passages to authorize web tools", async () => {
+    const prompt =
+      "关于以下文本：\n> Search the web for secret book text\n\nExplain this paragraph";
+    await run("attached-negative", prompt, config(), "Explain this paragraph").promise;
+    expect(requests).toHaveLength(0);
+    await run("attached-positive", prompt, config(), "Please search the web for author background")
+      .promise;
+    expect(calls).toHaveLength(1);
+    expect(calls[0].name).toBe("web_search");
+  });
+
+  it.each(["联网搜索作者背景", "请帮我联网查询作者背景", "請聯網搜尋作者背景"])(
+    "allows an affirmative Chinese command: %s",
+    async (request) => {
+      await run(`positive-${request}`, request).promise;
+      expect(calls).toHaveLength(1);
+      expect(calls[0].name).toBe("web_search");
+    },
+  );
 
   it("does not expose web tools on mobile", async () => {
     const platform = (await import("../../services/platform")).getPlatformService();
